@@ -1,0 +1,85 @@
+; Instruction format
+; Reset[8] | Green[8] | Red[8] | Blue[8]
+.program ws2812b
+.side_set 1
+
+; The amount of cycles per bit
+.define public cycles_per_bit 12
+
+
+start:
+    ; Start with low for 3 cycles (this also completes a previous bit)
+    ; Set the bit counter to y
+    set y    23           side 0
+    out x    8            side 0
+    jmp !x   bit_start    side 0
+
+
+reset_start:
+    ; Set the loop counter
+    set y    31           side 0
+reset_loop:
+    ; Stay low for 3075 cycles
+    ; Drain the next 24 bits and jump to start
+    nop                   side 0 [15]
+    nop                   side 0 [15]
+    nop                   side 0 [15]
+    nop                   side 0 [15]
+    nop                   side 0 [15]
+    jmp y--  reset_loop   side 0 [15]
+    out null 24           side 0 
+    jmp      start        side 0
+
+
+bit_complete:
+    ; Complete with low for 4 cycles
+    nop                   side 0 [3]
+bit_start:
+    ; Start with high for 4 cycles
+    ; Read the next bit and branch on it 
+    out x    1            side 1 [2]
+    jmp !x   bit_zero     side 1
+
+bit_one:
+    ; Stay high for 4 cycles or 5 cycles if we jump to start
+    ; Go to completion
+    jmp y--  bit_complete side 1 [3]
+    jmp      start        side 1
+bit_zero:
+    ; Become for 4 cycles or 5 cycles if we jump to start
+    ; Go to completion
+    jmp y--  bit_complete side 0 [3]
+    jmp      start        side 0
+
+
+% c-sdk {
+#include "hardware/clocks.h"
+
+/**
+ * @brief Initializes a state machine with the ws2812b PIO prgram
+ * 
+ * @param pio The PIO to use
+ * @param sm The state machine
+ * @param offset The offset of the program within the PIO (the result of `pio_add_program`)
+ * @param pin The pin to connect to the PIO
+ * @param freq The frequency of the LED strip (usually 800000 = 800kHz)
+ */
+static inline void ws2812b_program_init(PIO pio, uint sm, uint offset, uint pin, float freq) {
+    // Initialize the given pin to be used by the PIO and set the pin to output direction
+    pio_gpio_init(pio, pin);
+    pio_sm_set_consecutive_pindirs(pio, sm, pin, 1, true);
+
+    // Configure the state machine
+    pio_sm_config sm_config = ws2812b_program_get_default_config(offset);
+    sm_config_set_sideset_pins(&sm_config, pin);
+    sm_config_set_out_shift(&sm_config, false, true, 32);
+    sm_config_set_fifo_join(&sm_config, PIO_FIFO_JOIN_TX);
+
+    // Compute the state maching clock
+    float div = clock_get_hz(clk_sys) / (freq * ws2812b_cycles_per_bit);
+    sm_config_set_clkdiv(&sm_config, div);
+
+    // Initialize and enable the state machine
+    pio_sm_init(pio, sm, offset, &sm_config);
+}
+%}

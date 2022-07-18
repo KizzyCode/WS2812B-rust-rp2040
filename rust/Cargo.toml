@@ -1,0 +1,37 @@
+[package]
+name = "rust"
+version = "0.1.0"
+edition = "2021"
+authors = ["KizzyCode Software Labs./Keziah Biermann <development@kizzycode.de>"]
+keywords = []
+categories = []
+description = "TODO"
+license = "BSD-2-Clause OR MIT"
+readme = "README.md"
+
+
+[badges]
+
+
+[lib]
+name = "rust"
+crate-type = ["staticlib"]
+
+
+[features]
+default = []
+
+
+[dependencies]
+picolib = { git = "https://github.com/KizzyCode/picolib-rust-rp2040" }
+
+[build-dependencies]
+
+
+[profile.dev]
+overflow-checks = true
+
+[profile.release]
+lto = "fat"
+opt-level = "s"
+overflow-checks = true
