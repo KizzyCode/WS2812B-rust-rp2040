@@ -9,7 +9,7 @@ use picolib::{error::Error, sys};
 const VALID_CHARS: &[u8] = b"0123456789: \n";
 
 /// Reads a line from stdin
-fn readline(buf: &mut Vec<u8>) -> Result<(), Error> {
+fn read_line(buf: &mut Vec<u8>) -> Result<(), Error> {
     // Read from stdin
     'read_loop: loop {
         // Read the next byte and ignore invalid ones
@@ -32,8 +32,8 @@ fn readline(buf: &mut Vec<u8>) -> Result<(), Error> {
     }
 }
 
-/// Parses a field, returns `(strip, led, rgb_values)`
-fn parse_field(field: &str) -> Result<(usize, usize, Rgb), Error> {
+/// Parses a command, returns `(strip, led, rgb_values)`
+fn parse_command(field: &str) -> Result<(usize, usize, Rgb), Error> {
     // Split the field and take the segments
     let mut segments = field.split(':');
     let strip = segments.next().ok_or(error!("Field is truncated"))?;
@@ -58,19 +58,22 @@ fn parse_field(field: &str) -> Result<(usize, usize, Rgb), Error> {
 }
 
 /// Reads a command into `linebuf`, parses it and applies the changes to `state`
-pub fn parse(linebuf: &mut Vec<u8>, state: &mut [Matrix]) -> Result<(), Error> {
+pub fn parse<'a>(linebuf: &'a mut Vec<u8>, state: &mut [Matrix]) -> Result<&'a str, Error> {
     // Read a line
     linebuf.clear();
-    readline(linebuf)?;
-    let line = str::from_utf8(linebuf).expect("Non-UTF-8 char in line?!");
+    read_line(linebuf)?;
+    let line = str::from_utf8(linebuf).map_err(|_| error!("Non-UTF-8 char in line?!"))?;
+
+    // Get the transaction ID
+    let mut fields = line.split(' ');
+    let transaction_id = fields.next().ok_or(error!("Truncated command ID"))?;
 
     // Split the line into fields
-    let fields = line.split(' ');
     for field in fields {
         // Parses the field and update the appropriate strip
-        let (strip, led, rgb) = parse_field(field)?;
+        let (strip, led, rgb) = parse_command(field)?;
         let strip = state.get_mut(strip).ok_or(error!("Strip index is invalid"))?;
         strip.set(led, rgb)?;
     }
-    Ok(())
+    Ok(transaction_id)
 }
